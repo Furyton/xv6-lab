@@ -5,6 +5,8 @@
 
 -include conf/lab.mk
 
+debug := ____nonsense
+
 K=kernel
 U=user
 
@@ -207,6 +209,10 @@ endif
 QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nographic
 QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+
+deb:
+	rm -f user/$(debug).d user/$(debug).o user/$(debug).sym user/_$(debug)
+	make qemu
 
 qemu: $K/kernel fs.img
 	$(QEMU) $(QEMUOPTS)
