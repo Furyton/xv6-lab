@@ -6,7 +6,7 @@ void pipeline(int fd[]) {
     int p, n, cfd[2] = {-1};
     close(fd[1]);
     if (read(fd[0], &p, sizeof(int)) > 0) {
-        printf("prime: %d\n", p);
+        printf("prime %d\n", p);
 
         while(read(fd[0], &n, sizeof(int)) > 0) {
             if (n % p != 0) {
