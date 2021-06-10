@@ -133,7 +133,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_sysinfo] sys_sysinfo,
 };
 
-static uint64 *sysname[] = {
+static char *sysname[] = {
 [SYS_fork]    "fork",
 [SYS_exit]    "exit",
 [SYS_wait]    "wait",

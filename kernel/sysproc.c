@@ -101,7 +101,7 @@ uint64
 sys_trace(void)
 {
   uint64 mask;
-  if (argint(0, &mask) > 0) {
+  if (argint(0, (int*)&mask) > 0) {
     return -1;
   }
 
