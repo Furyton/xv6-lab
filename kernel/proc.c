@@ -40,6 +40,7 @@ procinit(void)
       uint64 va = KSTACK((int) (p - proc));
       kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
       p->kstack = va;
+      p->pkstack = (uint64)pa;
   }
   kvminithart();
 }
@@ -113,12 +114,22 @@ found:
     return 0;
   }
 
-  // An empty user page table.
+  // An empty user page table,
+  // and an kernel page table.
   p->pagetable = proc_pagetable(p);
-  if(p->pagetable == 0){
+
+  // printf("[allocproc]: before new_kpagetable\n");
+
+  p->kpagetable = new_kpagetable();
+
+  if(p->pagetable == 0 || p->kpagetable == 0){
     freeproc(p);
     release(&p->lock);
     return 0;
+  }
+
+  for(struct proc* pr = proc; pr < &proc[NPROC]; pr++) {
+    kvmmap_(p->kpagetable, pr->kstack, pr->pkstack, PGSIZE, PTE_R | PTE_W);
   }
 
   // Set up new context to start executing at forkret,
@@ -141,6 +152,9 @@ freeproc(struct proc *p)
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+  if(p->kpagetable) 
+    kvmfree(p->kpagetable);
+
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -212,6 +226,8 @@ void
 userinit(void)
 {
   struct proc *p;
+
+  // printf("[userinit]: before allocproc\n");
 
   p = allocproc();
   initproc = p;
@@ -473,8 +489,13 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+
+        w_satp(MAKE_SATP(p->kpagetable));
+        sfence_vma();
+
         swtch(&c->context, &p->context);
 
+        kvminithart();
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
@@ -485,7 +506,9 @@ scheduler(void)
     }
 #if !defined (LAB_FS)
     if(found == 0) {
+      // printf("[scheduler]: no found, before kvminithart");
       intr_on();
+      kvminithart();
       asm volatile("wfi");
     }
 #else
