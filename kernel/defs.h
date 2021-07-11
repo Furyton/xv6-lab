@@ -183,6 +183,12 @@ int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 void            vmprint(pagetable_t);
 
+// vmcopyin.c
+
+int             copyin_new(pagetable_t, char *, uint64, uint64);
+
+int             copyinstr_new(pagetable_t, char *, uint64, uint64);
+
 // plic.c
 void            plicinit(void);
 void            plicinithart(void);
