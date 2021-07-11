@@ -153,7 +153,8 @@ freeproc(struct proc *p)
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   if(p->kpagetable) 
-    kvmfree(p->kpagetable);
+    kvmfree(p->kpagetable, p->sz);
+    // sync_pagetable(p->pagetable, )
 
   p->pagetable = 0;
   p->sz = 0;
@@ -235,6 +236,11 @@ userinit(void)
   // allocate one user page and copy init's instructions
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
+  sync_pagetable(p->pagetable, p->kpagetable, 0, PGSIZE);
+
+  printf("[userinit]: user page table\n");
+  vmprint(p->pagetable);
+
   p->sz = PGSIZE;
 
   // prepare for the very first "return" from kernel to user.
@@ -265,6 +271,7 @@ growproc(int n)
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
+  sync_pagetable(p->pagetable, p->kpagetable, p->sz, sz);
   p->sz = sz;
   return 0;
 }
@@ -284,7 +291,7 @@ fork(void)
   }
 
   // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0 || sync_pagetable(p->pagetable, np->kpagetable, 0, p->sz) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -492,6 +499,8 @@ scheduler(void)
 
         w_satp(MAKE_SATP(p->kpagetable));
         sfence_vma();
+
+        // printf("[scheduler]: switch to pid %d\n", p->pid);
 
         swtch(&c->context, &p->context);
 

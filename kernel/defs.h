@@ -172,9 +172,10 @@ uint64          uvmdealloc(pagetable_t, uint64, uint64);
 #ifdef SOL_COW
 #else
 int             uvmcopy(pagetable_t, pagetable_t, uint64);
+int             sync_pagetable(pagetable_t upagetable, pagetable_t kpagetable, uint64 oldsz, uint64 newsz);
 #endif
 void            uvmfree(pagetable_t, uint64);
-void            kvmfree(pagetable_t);
+void            kvmfree(pagetable_t, uint64);
 void            uvmunmap(pagetable_t, uint64, uint64, int);
 void            uvmclear(pagetable_t, uint64);
 uint64          walkaddr(pagetable_t, uint64);

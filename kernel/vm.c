@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -148,7 +150,7 @@ kvmpa(uint64 va)
   pte_t *pte;
   uint64 pa;
   
-  pte = walk(kernel_pagetable, va, 0);
+  pte = walk(myproc()->kpagetable, va, 0);
   if(pte == 0)
     panic("kvmpa");
   if((*pte & PTE_V) == 0)
@@ -247,6 +249,9 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
   char *mem;
   uint64 a;
 
+  if(newsz >= PROCLIMIT)
+    return 0;
+
   if(newsz < oldsz)
     return oldsz;
 
@@ -288,7 +293,7 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 // Recursively free page-table pages.
 // All leaf mappings must already have been removed.
 void
-freewalk(pagetable_t pagetable)
+freewalk(pagetable_t pagetable, int need_panic)
 {
   // there are 2^9 = 512 PTEs in a page table.
   for(int i = 0; i < 512; i++){
@@ -296,9 +301,9 @@ freewalk(pagetable_t pagetable)
     if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
       // this PTE points to a lower-level page table.
       uint64 child = PTE2PA(pte);
-      freewalk((pagetable_t)child);
+      freewalk((pagetable_t)child, need_panic);
       pagetable[i] = 0;
-    } else if(pte & PTE_V){
+    } else if(need_panic && (pte & PTE_V)){
       panic("freewalk: leaf");
     }
   }
@@ -312,32 +317,20 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 {
   if(sz > 0)
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
-  freewalk(pagetable);
+  freewalk(pagetable, 1);
 }
 
 // Free kernel page-table pages.
 void
-kvmfree(pagetable_t pagetable)
+kvmfree(pagetable_t pagetable, uint64 sz)
 {
-  for(int i = 0; i < 512; i++){
-    pte_t pte = pagetable[i];
-    if ((pte & PTE_V) && (pte & (PTE_R | PTE_W | PTE_X)) == 0) {
-      uint64 child = PTE2PA(pte);
-      kvmfree((pagetable_t)child);
-      pagetable[i] = 0;
-    }
-  }
-  kfree((void*)pagetable);
+  if(sz > 0)
+    uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
+  freewalk(pagetable, 0);
 }
 
-// Given a parent process's page table, copy
-// its memory into a child's page table.
-// Copies both the page table and the
-// physical memory.
-// returns 0 on success, -1 on failure.
-// frees any allocated pages on failure.
 int
-uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
+vmcopy_(pagetable_t old, pagetable_t new, uint64 sz, int is_kernel)
 {
   pte_t *pte;
   uint64 pa, i;
@@ -351,6 +344,11 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
+
+    if(is_kernel) {
+      flags &= ~PTE_U;
+    }
+
     if((mem = kalloc()) == 0)
       goto err;
     memmove(mem, (char*)pa, PGSIZE);
@@ -364,6 +362,45 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
  err:
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
+}
+
+// Given a parent process's page table, copy
+// its memory into a child's page table.
+// Copies both the page table and the
+// physical memory.
+// returns 0 on success, -1 on failure.
+// frees any allocated pages on failure.
+int
+uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
+{
+  return vmcopy_(old, new, sz, 0);
+}
+
+int
+sync_pagetable(pagetable_t upagetable, pagetable_t kpagetable, uint64 oldsz, uint64 newsz)
+{
+  printf("[sync_pagetable]: step in\n");
+  if(oldsz > 0)
+    uvmunmap(kpagetable, 0, PGROUNDUP(oldsz)/PGSIZE, 1);
+  return vmcopy_(upagetable, kpagetable, newsz, 1);
+
+  // pte_t *oldpte, *newpte;
+  // uint64 pa, a;
+  // uint flags;
+
+  // oldsz = PGROUNDUP(oldsz);
+  // for (a = oldsz; a < newsz; a += PGSIZE) {
+  //   if ((oldpte = walk(upagetable, a, 0)) == 0)
+  //     panic("ukvmcopy: oldpte should exist");
+  //   if ((*oldpte & PTE_V) == 0)
+  //     panic("ukvmcopy: page not present");
+  //   if ((newpte = walk(kpagetable, a, 1)) == 0)
+  //     panic("ukvmcopy: newpte should exist");
+  //   pa = PTE2PA(*oldpte);
+  //   flags = PTE_FLAGS(*oldpte & ~PTE_U);
+  //   *newpte = PA2PTE(pa) | flags;
+  // }
+  // return 0;
 }
 
 // mark a PTE invalid for user access.
@@ -410,7 +447,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
-  return copyin(pagetable, dst, srcva, len);
+  return copyin_new(pagetable, dst, srcva, len);
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -420,7 +457,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
-  return copyinstr(pagetable, dst, srcva, max);
+  return copyinstr_new(pagetable, dst, srcva, max);
 }
 
 void
