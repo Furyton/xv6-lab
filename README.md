@@ -5,7 +5,7 @@ still at the very begining
 
 - [x] util
 - [x] syscall
-- [ ] pgtbl
+- [x] pgtbl
 - [ ] traps
 - [ ] cow
 - [ ] lazy
