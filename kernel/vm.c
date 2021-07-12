@@ -325,36 +325,39 @@ void
 kvmfree(pagetable_t pagetable, uint64 sz)
 {
   if(sz > 0)
-    uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
+    uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 0);
   freewalk(pagetable, 0);
 }
 
 int
 vmcopy_(pagetable_t old, pagetable_t new, uint64 sz, int is_kernel)
 {
-  pte_t *pte;
+  pte_t *pte, *newpte;
   uint64 pa, i;
   uint flags;
   char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
+      panic("vmcopy_: pte should exist");
     if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+      panic("vmcopy_: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
 
     if(is_kernel) {
       flags &= ~PTE_U;
-    }
-
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      goto err;
+      if((newpte = walk(new, i, 1)) == 0)
+        panic("vmcopy_: new pte should exist");
+      *newpte = PA2PTE(pa) | flags;
+    } else {
+      if((mem = kalloc()) == 0)
+        goto err;
+      memmove(mem, (char*)pa, PGSIZE);
+      if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+        kfree(mem);
+        goto err;
+      }
     }
   }
   return 0;
@@ -379,28 +382,9 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 int
 sync_pagetable(pagetable_t upagetable, pagetable_t kpagetable, uint64 oldsz, uint64 newsz)
 {
-  printf("[sync_pagetable]: step in\n");
   if(oldsz > 0)
-    uvmunmap(kpagetable, 0, PGROUNDUP(oldsz)/PGSIZE, 1);
+    uvmunmap(kpagetable, 0, PGROUNDUP(oldsz)/PGSIZE, 0);
   return vmcopy_(upagetable, kpagetable, newsz, 1);
-
-  // pte_t *oldpte, *newpte;
-  // uint64 pa, a;
-  // uint flags;
-
-  // oldsz = PGROUNDUP(oldsz);
-  // for (a = oldsz; a < newsz; a += PGSIZE) {
-  //   if ((oldpte = walk(upagetable, a, 0)) == 0)
-  //     panic("ukvmcopy: oldpte should exist");
-  //   if ((*oldpte & PTE_V) == 0)
-  //     panic("ukvmcopy: page not present");
-  //   if ((newpte = walk(kpagetable, a, 1)) == 0)
-  //     panic("ukvmcopy: newpte should exist");
-  //   pa = PTE2PA(*oldpte);
-  //   flags = PTE_FLAGS(*oldpte & ~PTE_U);
-  //   *newpte = PA2PTE(pa) | flags;
-  // }
-  // return 0;
 }
 
 // mark a PTE invalid for user access.

@@ -154,7 +154,6 @@ freeproc(struct proc *p)
     proc_freepagetable(p->pagetable, p->sz);
   if(p->kpagetable) 
     kvmfree(p->kpagetable, p->sz);
-    // sync_pagetable(p->pagetable, )
 
   p->pagetable = 0;
   p->sz = 0;
@@ -228,8 +227,6 @@ userinit(void)
 {
   struct proc *p;
 
-  // printf("[userinit]: before allocproc\n");
-
   p = allocproc();
   initproc = p;
   
@@ -237,9 +234,6 @@ userinit(void)
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
   sync_pagetable(p->pagetable, p->kpagetable, 0, PGSIZE);
-
-  printf("[userinit]: user page table\n");
-  vmprint(p->pagetable);
 
   p->sz = PGSIZE;
 
@@ -500,8 +494,6 @@ scheduler(void)
         w_satp(MAKE_SATP(p->kpagetable));
         sfence_vma();
 
-        // printf("[scheduler]: switch to pid %d\n", p->pid);
-
         swtch(&c->context, &p->context);
 
         kvminithart();
@@ -515,7 +507,6 @@ scheduler(void)
     }
 #if !defined (LAB_FS)
     if(found == 0) {
-      // printf("[scheduler]: no found, before kvminithart");
       intr_on();
       kvminithart();
       asm volatile("wfi");
