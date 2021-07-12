@@ -277,17 +277,23 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 // need to be less than oldsz.  oldsz can be larger than the actual
 // process size.  Returns the new process size.
 uint64
-uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
+vmdealloc_(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int do_free)
 {
   if(newsz >= oldsz)
     return oldsz;
 
   if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
     int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
-    uvmunmap(pagetable, PGROUNDUP(newsz), npages, 1);
+    uvmunmap(pagetable, PGROUNDUP(newsz), npages, do_free);
   }
 
   return newsz;
+}
+
+uint64
+uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
+{
+  return vmdealloc_(pagetable, oldsz, newsz, 1);
 }
 
 // Recursively free page-table pages.
@@ -330,27 +336,28 @@ kvmfree(pagetable_t pagetable, uint64 sz)
 }
 
 int
-vmcopy_(pagetable_t old, pagetable_t new, uint64 sz, int is_kernel)
+vmcopy_(pagetable_t old, pagetable_t new, uint64 oldsz, uint64 newsz, int do_alloc)
 {
   pte_t *pte, *newpte;
   uint64 pa, i;
   uint flags;
   char *mem;
 
-  for(i = 0; i < sz; i += PGSIZE){
+  oldsz = oldsz ? PGROUNDUP(oldsz) : 0;
+  for(i = oldsz; i < newsz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("vmcopy_: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("vmcopy_: page not present");
     pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-
-    if(is_kernel) {
-      flags &= ~PTE_U;
+    
+    if(!do_alloc) {
+      flags = PTE_FLAGS(*pte & ~PTE_U);
       if((newpte = walk(new, i, 1)) == 0)
         panic("vmcopy_: new pte should exist");
       *newpte = PA2PTE(pa) | flags;
     } else {
+      flags = PTE_FLAGS(*pte);
       if((mem = kalloc()) == 0)
         goto err;
       memmove(mem, (char*)pa, PGSIZE);
@@ -360,6 +367,7 @@ vmcopy_(pagetable_t old, pagetable_t new, uint64 sz, int is_kernel)
       }
     }
   }
+
   return 0;
 
  err:
@@ -376,15 +384,23 @@ vmcopy_(pagetable_t old, pagetable_t new, uint64 sz, int is_kernel)
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
-  return vmcopy_(old, new, sz, 0);
+  return vmcopy_(old, new, 0, sz, 1);
 }
 
 int
-sync_pagetable(pagetable_t upagetable, pagetable_t kpagetable, uint64 oldsz, uint64 newsz)
+sync_pagetable(pagetable_t upagetable, pagetable_t kpagetable, uint64 oldsz, uint64 newsz, int append)
 {
-  if(oldsz > 0)
-    uvmunmap(kpagetable, 0, PGROUNDUP(oldsz)/PGSIZE, 0);
-  return vmcopy_(upagetable, kpagetable, newsz, 1);
+  if (append) {
+    if (oldsz > newsz) {
+      return vmdealloc_(kpagetable, oldsz, newsz, 0);
+    } else {
+      return vmcopy_(upagetable, kpagetable, oldsz, newsz, 0);
+    }
+  } else {
+    if(oldsz > 0)
+      uvmunmap(kpagetable, 0, PGROUNDUP(oldsz)/PGSIZE, 0);
+    return vmcopy_(upagetable, kpagetable, 0, newsz, 0);
+  }
 }
 
 // mark a PTE invalid for user access.
