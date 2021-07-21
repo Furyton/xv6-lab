@@ -108,7 +108,7 @@ found:
   p->pid = allocpid();
 
   // Allocate a trapframe page.
-  if((p->trapframe = (struct trapframe *)kalloc()) == 0){
+  if((p->trapframe = (struct trapframe *)kalloc()) == 0 || (p->resume_trapframe = (struct trapframe *)kalloc()) == 0){
     release(&p->lock);
     return 0;
   }
@@ -127,6 +127,8 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  p->ticks = p->r_ticks = p->alarm_handler = p->handling = 0;
+
   return p;
 }
 
@@ -138,6 +140,8 @@ freeproc(struct proc *p)
 {
   if(p->trapframe)
     kfree((void*)p->trapframe);
+  if(p->resume_trapframe)
+    kfree((void*)p->resume_trapframe);
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
