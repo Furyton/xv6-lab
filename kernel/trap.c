@@ -67,34 +67,31 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if (r_scause() == 15){
+  } else if (r_scause() == 15 || r_scause() == 13){
       char *mem;
-      uint64 a;
       pagetable_t pagetable = p->pagetable;
 
-      uint64 newsz = PGROUNDDOWN(r_stval()), oldsz = PGROUNDUP(p->sz);
+      uint64 va = PGROUNDDOWN(r_stval());
 
-      if(oldsz < newsz) {
-        for(a = oldsz; a < newsz; a += PGSIZE){
-          mem = kalloc();
-          if(mem == 0){
-            uvmdealloc(pagetable, a, oldsz);
-            break;
-          }
-          memset(mem, 0, PGSIZE);
-          if(mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
-            kfree(mem);
-            uvmdealloc(pagetable, a, oldsz);
-            break;
-          }
+      if (va > p->sz || va <= PGROUNDDOWN(p->trapframe->sp))
+        goto bad;
+
+      mem = kalloc();
+      if(mem == 0) {
+        uvmdealloc(pagetable, va, va);
+        goto bad;
+      } else {
+        if(mappages(pagetable, va, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
+          kfree(mem);
+          uvmdealloc(pagetable, va, va);
+          goto bad;
         }
       }
   } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    p->killed = 1;
+    goto bad;
   }
 
+finished:
   if(p->killed)
     exit(-1);
 
@@ -103,6 +100,13 @@ usertrap(void)
     yield();
 
   usertrapret();
+
+  return;
+bad:
+  printf("usertrap(): error on cause %p pid=%d\n", r_scause(), p->pid);
+  printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+  p->killed = 1;
+  goto finished;
 }
 
 //
