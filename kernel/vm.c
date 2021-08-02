@@ -126,35 +126,23 @@ walkaddr(pagetable_t pagetable, uint64 va)
 
   if(pte == 0 || (*pte & PTE_V) == 0)
   {
-    if (va >= myproc()->sz || va <= PGROUNDUP(myproc()->trapframe->sp))
+    struct proc *p = myproc();
+    if (va >= p->sz || va < PGROUNDUP(p->trapframe->sp))
       return 0;
-    if ((pte = walk(pagetable, va, 1)) == 0) {
+    char *mem = kalloc();
+    
+    if((pte = walk(p->pagetable, PGROUNDDOWN(va), 1)) == 0)
       return 0;
-    }
-    *pte |= PTE_W|PTE_X|PTE_R|PTE_U;
-    // struct proc *p = myproc();
-    // if (va >= p->sz || va < PGROUNDUP(p->trapframe->sp))
-    //   return 0;
-    // char *mem = kalloc();
-    // if (mem == 0)
-    // {
-    //   printf("walkaddr: kalloc failed\n");
-    //   return 0;
-    // }
-    // if (mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0)
-    // {
-    //   printf("walkaddr: mappages failed\n");
-    //   kfree(mem);
-    //   return 0;
-    // }
-    // return (uint64)mem;
+    *pte = PA2PTE(mem) | PTE_W|PTE_X|PTE_R|PTE_U | PTE_V;
+    return (uint64)mem;
   }
-  // if(pte == 0)
-  //   return 0;
-  // if((*pte & PTE_V) == 0)
-  //   return 0;
-  // if((*pte & PTE_U) == 0)
-  //   return 0;
+  if(pte == 0)
+    return 0;
+  if((*pte & PTE_V) == 0)
+    return 0;
+  if((*pte & PTE_U) == 0)
+    return 0;
+
   pa = PTE2PA(*pte);
   return pa;
 }

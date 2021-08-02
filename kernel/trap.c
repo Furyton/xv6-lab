@@ -73,21 +73,26 @@ usertrap(void)
 
       uint64 va = PGROUNDDOWN(r_stval());
 
-      if (va > p->sz || va <= PGROUNDDOWN(p->trapframe->sp))
+      if (va >= p->sz || va <= PGROUNDDOWN(p->trapframe->sp)) {
+        printf("usertrap: illegal address\n");
         goto bad;
+      }
+        
 
       mem = kalloc();
       if(mem == 0) {
-        uvmdealloc(pagetable, va, va);
+        printf("usertrap: allocate new page failed\n");
         goto bad;
       } else {
         if(mappages(pagetable, va, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
           kfree(mem);
-          uvmdealloc(pagetable, va, va);
+          printf("usertrap: map page failed\n");
           goto bad;
         }
       }
   } else {
+    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     goto bad;
   }
 
@@ -103,8 +108,6 @@ finished:
 
   return;
 bad:
-  printf("usertrap(): error on cause %p pid=%d\n", r_scause(), p->pid);
-  printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
   p->killed = 1;
   goto finished;
 }
