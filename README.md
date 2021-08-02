@@ -12,7 +12,7 @@ welcome to report an issue or PR :)
 - [x] pgtbl
 - [x] traps
 - [ ] cow
-- [ ] lazy
+- [x] lazy
 - [ ] lock
 - [ ] thread
 - [ ] fs
