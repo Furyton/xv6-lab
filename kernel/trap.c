@@ -67,33 +67,23 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if (r_scause() == 13 || r_scause() == 15) {
-    pte_t *pte;
-    if (pte = walk(p->pagetable, r_sepc(), 0) == 0) {
-      printf("usertrap(): page fault, pte should exsit\n");
-      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+  } else {
+    // printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+    // printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+    
+    // page fault
+    if (r_scause() == 13 || r_scause() == 15)
+    {
+      uint64 va = r_stval();
+      if (va >= MAXVA || page_fault_handler(p->pagetable, va) != 0)
+        goto killed;
+    }
+    else
+    {
       goto killed;
     }
-    if (*pte & PTE_C) {
-      char *mem;
-      uint64 pa;
-      uint flags;
-
-      pa = PTE2PA(*pte);
-      flags = ( PTE_FLAGS(*pte) | PTE_W ) & ~PTE_C;
-      if ((mem = kalloc()) == 0)
-        goto killed;
-      memmove(mem, (char*)pa, PGSIZE);
-      *pte = PA2PTE(pa) | flags | PTE_V;
-    }
-  } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    goto killed;
   }
-
 done:
-
   if(p->killed)
     exit(-1);
 
@@ -104,9 +94,10 @@ done:
   usertrapret();
 
   return;
-
 killed:
   p->killed = 1;
+  printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+  printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
   goto done;
 }
 
@@ -245,3 +236,53 @@ devintr()
   }
 }
 
+int
+page_fault_handler(pagetable_t pagetable, uint64 va)
+{
+  uint64 pa;
+  pte_t *pte;
+  uint flags;
+
+  if (va >= MAXVA)
+  {
+    // printf("page fault handler: va >= MAXVA\n");
+    return -1;
+  }
+
+  va = PGROUNDDOWN(va);
+  pte = walk(pagetable, va, 0);
+  if (pte == 0)
+  {
+    // printf("page fault handler: walk failed\n");
+    return -1;
+  }
+
+  pa = PTE2PA(*pte);
+  if (pa == 0)
+  {
+    // printf("page fault handler: pa == 0\n");
+    return -1;
+  }
+
+  flags = PTE_FLAGS(*pte);
+  // cow page
+  if (flags & PTE_C)
+  {
+    char *mem = kalloc();
+    if (mem == 0)
+    {
+      // printf("page fault handler: kalloc failed\n");
+      return -1;
+    }
+    memmove(mem, (char*)pa, PGSIZE);
+    kfree((void*)pa);
+    flags = (flags & ~PTE_C) | PTE_W;
+    *pte = PA2PTE((uint64)mem) | flags;
+    return 0;
+  }
+  else
+  {
+    // printf("page fault handler: not cow page\n");
+    return 0;
+  }
+}
