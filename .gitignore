@@ -19,3 +19,6 @@ user/usys.S
 myapi.key
 *-handin.tar.gz
 xv6.out*
+.vscode
+__pycache__
+time.txt
