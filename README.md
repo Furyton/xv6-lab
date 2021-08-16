@@ -11,7 +11,7 @@ welcome to report an issue or PR :)
 - [x] syscall
 - [x] pgtbl
 - [x] traps
-- [ ] cow
+- [x] cow
 - [x] lazy
 - [ ] lock
 - [ ] thread
