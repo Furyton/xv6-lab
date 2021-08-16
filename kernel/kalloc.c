@@ -23,56 +23,52 @@ struct {
   struct run *freelist;
 } kmem;
 
+#define PA2IDX(pa) (((uint64)pa) >> 12)
+
 struct {
   struct spinlock lock;
-  int ref[PHYSTOP >> 12];
+  int count[PHYSTOP >> 12];
 } refcnt;
 
 void
 rcinit()
 {
   initlock(&refcnt.lock, "refcnt");
+  acquire(&kmem.lock);
+  memset(refcnt.count, 0, sizeof(refcnt.count));
+  release(&kmem.lock);
+}
+
+void
+safe_increase_rc(void* pa)
+{
   acquire(&refcnt.lock);
-  memset(refcnt.ref, 0, sizeof(refcnt.ref));
+  refcnt.count[PA2IDX(pa)]++;
   release(&refcnt.lock);
 }
 
 void
 increase_rc(void *pa)
 {
-  acquire(&refcnt.lock);
-  refcnt.ref[((uint64)pa) >> 12]++;
-  release(&refcnt.lock);
+  refcnt.count[PA2IDX(pa)]++;
 }
 
 void
 decrease_rc(void *pa)
 {
-  acquire(&refcnt.lock);
-  refcnt.ref[((uint64)pa) >> 12]--;
-  release(&refcnt.lock);
+  refcnt.count[PA2IDX(pa)]--;
 }
 int
 get_rc(void *pa)
 {
-  acquire(&refcnt.lock);
-  int rc = refcnt.ref[((uint64)pa) >> 12];
-  release(&refcnt.lock);
+  int rc = refcnt.count[PA2IDX(pa)];
   return rc;
 }
 
 void
-reset_rc(void *pa)
+reset_rc(void* pa)
 {
-  acquire(&refcnt.lock);
-  refcnt.ref[((uint64)pa) >> 12] = 0;
-  release(&refcnt.lock);
-}
-
-void
-increase_rc_by_pte(pte_t* pte)
-{
-  increase_rc((void*)PTE2PA(*pte));
+  refcnt.count[PA2IDX(pa)] = 0;
 }
 
 void
@@ -104,13 +100,16 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
+  acquire(&refcnt.lock);
   decrease_rc(pa);
-  if (get_rc(pa) > 0)
+  if (get_rc(pa) > 0) {
+    release(&refcnt.lock);
     return;
+  }
+  reset_rc(pa);
+  release(&refcnt.lock);
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
-
-  reset_rc(pa);
 
   r = (struct run*)pa;
 
@@ -137,8 +136,10 @@ kalloc(void)
   if(r)
   {
     memset((char*)r, 5, PGSIZE); // fill with junk
+    acquire(&refcnt.lock);
     reset_rc((void*)r);
     increase_rc((void*)r);
+    release(&refcnt.lock);
   }
   return (void*)r;
 }

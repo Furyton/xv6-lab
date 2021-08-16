@@ -311,36 +311,41 @@ int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
-  uint64 pa, i;
-  uint flags;
+  uint64 i;
+  // uint flags;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
-    pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-    // clear PTE_W and mark the page as cow page.
-    if (flags & PTE_W)
-    {
-      flags = (flags | PTE_C) & (~PTE_W);
-      *pte = PA2PTE(pa) | flags;
-    }
+    // pa = PTE2PA(*pte);
+    // flags = PTE_FLAGS(*pte);
+    // // clear PTE_W and mark the page as cow page.
+    // if (flags & PTE_W)
+    // {
+    //   flags = (flags | PTE_C) & (~PTE_W);
+    //   *pte = PA2PTE(pa) | flags;
+    // }
+    *pte |= PTE_C;
+    *pte &= ~PTE_W;
+
+    pte_t *newpte = walk(new, i, 1);
+    *newpte = *pte;
 
     // increase refcount, if mappages failed, uvmunmap will decrease refcnt, 
     // so we should increase refcnt before mappages
-    increase_rc_by_pte(pte);
-    // 
-    if(mappages(new, i, PGSIZE, pa, flags) != 0){
-      goto err;
-    }
+    safe_increase_rc((void*)PTE2PA(*pte));
+    
+    // if(mappages(new, i, PGSIZE, pa, flags) != 0){
+    //   goto err;
+    // }
   }
   return 0;
 
- err:
-  uvmunmap(new, 0, i / PGSIZE, 1);
-  return -1;
+//  err:
+//   uvmunmap(new, 0, i / PGSIZE, 1);
+//   return -1;
 }
 
 // mark a PTE invalid for user access.
@@ -366,8 +371,6 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    if (va0 >= MAXVA)
-      return -1;
     if (page_fault_handler(pagetable, va0) != 0)
       return -1;
 
