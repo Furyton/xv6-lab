@@ -89,7 +89,8 @@ steal(int cur_cid) {
   struct run* r;
   for (cid = 0; cid < NCPU; cid ++) {
     if (cid == cur_cid) continue;
-
+    if (!kmem[cid].freelist) continue;
+    
     acquire(&kmem[cid].lock);
     r = kmem[cid].freelist;
     if (r) {

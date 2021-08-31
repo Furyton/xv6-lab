@@ -102,25 +102,31 @@ bget(uint dev, uint blockno)
     }
   }
 
-  acquire(&bcache.lock);
+  // acquire(&bcache.lock);
 
   struct buf* LRU_buf = 0;
 
-  int i, chc=-1;
-  for (i = 0; i < BUCKET_LEN; i++) {
-    // if(i != hc) acquire(&bcache.bucket[i].lock);
-
-    for (b = bcache.bucket[i].head.next; b != &bcache.bucket[i].head; b = b->next) {
+  int i, chc=-1, flag = 0;
+  for (i = hc; i < BUCKET_LEN + hc; i++) {
+    int hc_ = i % BUCKET_LEN;
+    if(hc_ != hc) acquire(&bcache.bucket[hc_].lock);
+    flag = 0;
+    for (b = bcache.bucket[hc_].head.next; b != &bcache.bucket[hc_].head; b = b->next) {
       if (b->refcnt == 0 && (!LRU_buf || b->time_stamp < LRU_buf->time_stamp)) {
         LRU_buf = b;
-        chc = i;
+        if (chc != -1 && chc != hc && chc != hc_) 
+          release(&bcache.bucket[chc].lock);
+        chc = hc_;
+        flag = 1;
       }
     }
-    // if (i!=hc && !flag) release(&bcache.bucket[i].lock);
+    if (hc_!=hc && !flag) release(&bcache.bucket[hc_].lock);
+    else if (flag) goto succ;
   }
+succ:
   if (LRU_buf) {
     if (chc != hc) {
-      acquire(&bcache.bucket[chc].lock);
+      // acquire(&bcache.bucket[chc].lock);
       pop(LRU_buf);
       push(LRU_buf, hc);
       release(&bcache.bucket[chc].lock);
@@ -131,58 +137,11 @@ bget(uint dev, uint blockno)
     LRU_buf->refcnt = 1;
     LRU_buf->time_stamp = ticks;
     release(&bcache.bucket[hc].lock);
-    release(&bcache.lock);
+    // release(&bcache.lock);
     acquiresleep(&LRU_buf->lock);
     return LRU_buf;
   }
 
-  // acquire(&bcache.lock);
-
-  // struct buf* LRU_buf = 0;
-  // uint shc = -1, chc; // source hashcode, current hashcode
-
-  // for(b = bcache.buf; b < bcache.buf+NBUF; b++){
-  //   chc = HASH(b->blockno);
-  //   if (LRU_buf && chc == shc) { // bucket has locked
-  //     if (b->refcnt == 0 && b->time_stamp < LRU_buf->time_stamp) {
-  //       LRU_buf = b;
-  //     }
-  //   } else if (LRU_buf) { // need to lock a different bucket
-  //     if (chc != hc) acquire(&bcache.bucket[chc].lock);
-
-  //     if (b->refcnt == 0 && b->time_stamp < LRU_buf->time_stamp) {
-  //       LRU_buf = b;
-  //       if (shc != hc) release(&bcache.bucket[shc].lock);
-  //       shc = chc;
-  //     } else {
-  //       if (chc != hc) release(&bcache.bucket[chc].lock);
-  //     }
-  //   } else { // haven't found unused buff
-  //     if (chc != hc) acquire(&bcache.bucket[chc].lock);
-  //     if (b->refcnt == 0) {
-  //       LRU_buf = b;
-  //       shc = chc;
-  //     }
-  //   }
-  // }
-  // if (LRU_buf) {
-
-  //   if (hc != shc) {
-  //     pop(LRU_buf);
-  //     push(LRU_buf, hc);
-  //   }
-
-  //   LRU_buf->dev = dev;
-  //   LRU_buf->blockno = blockno;
-  //   LRU_buf->valid = 0;
-  //   LRU_buf->refcnt = 1;
-  //   LRU_buf->time_stamp = ticks;
-  //   if(shc != hc) release(&bcache.bucket[shc].lock);
-  //   release(&bcache.bucket[hc].lock);
-  //   release(&bcache.lock);
-  //   acquiresleep(&LRU_buf->lock);
-  //   return LRU_buf;
-  // }
   panic("bget: no buffers");
 }
 
