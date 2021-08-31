@@ -13,7 +13,7 @@ welcome to report an issue or PR :)
 - [x] traps
 - [x] cow
 - [x] lazy
-- [ ] lock
+- [x] lock
 - [ ] thread
 - [ ] fs
 - [ ] mmap
