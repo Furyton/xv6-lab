@@ -14,7 +14,7 @@ welcome to report an issue or PR :)
 - [x] cow
 - [x] lazy
 - [x] lock
-- [ ] thread
+- [x] thread
 - [ ] fs
 - [ ] mmap
 - [ ] net
