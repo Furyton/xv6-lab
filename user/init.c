@@ -5,6 +5,7 @@
 #include "kernel/spinlock.h"
 #include "kernel/sleeplock.h"
 #include "kernel/fs.h"
+#include "kernel/param.h"
 #include "kernel/file.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
