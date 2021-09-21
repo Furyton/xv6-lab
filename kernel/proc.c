@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
 
 struct cpu cpus[NCPU];
 
@@ -48,6 +49,7 @@ procinit(void)
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->kstack = KSTACK((int) (p - proc));
+      p->max_addr = MAXVMA;
   }
 }
 
@@ -146,6 +148,7 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+  // printf("freeproc: pid : %d\n", p->pid);
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -157,6 +160,8 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  memset(p->vma, 0, sizeof(p->vma));
+  p->max_addr = MAXVMA;
 }
 
 // Create a user page table for a given process,
@@ -302,7 +307,26 @@ fork(void)
 
   np->state = RUNNABLE;
 
+  for (int i = 0; i < NVMA; i++) {
+    struct vma *new_vma = 0, *vma = p->vma[i];
+    if (vma) {
+      if ((new_vma = vmaalloc()) == 0)
+        panic("fork: no enough vma");
+      new_vma->file = filedup(vma->file);
+      new_vma->start = vma->start;
+      new_vma->end = vma->end;
+      new_vma->prot = vma->prot;
+      new_vma->flags = vma->flags;
+      new_vma->length = vma->length;
+    }
+    np->vma[i] = new_vma;
+  }
+
+  np->max_addr = p->max_addr;
+
   release(&np->lock);
+
+  // printf("fork: finished fork\n");
 
   return pid;
 }
@@ -343,6 +367,25 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
+  
+  for (int i = 0; i < NVMA; i++) {
+    if (p->vma[i]) {
+      uint64 start;
+      if ((start = walkaddr(p->pagetable, p->vma[i]->start))) {
+        struct vma *vp = p->vma[i];
+        if (vp->flags & MAP_SHARED) {
+          // filewrite(vp->file, vp->start, vp->length);
+        }
+        uvmunmap(p->pagetable, PGROUNDDOWN(vp->start), (vp->end - PGROUNDDOWN(vp->start)) / PGSIZE, 1);
+        // printf("exit: %p\n", start);
+      }
+      fileclose(p->vma[i]->file);
+      vmadealloc(p->vma[i]);
+      p->vma[i] = 0;
+    }
+  }
+
+  p->max_addr = MAXVMA;
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){

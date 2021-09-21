@@ -5,6 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
+#include "fs.h"
+#include "sleeplock.h"
+#include "file.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -67,12 +71,63 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if (r_scause() == 15 || r_scause() == 13){
+      char *mem;
+      pagetable_t pagetable = p->pagetable;
+
+      uint64 va = PGROUNDDOWN(r_stval()), original_va = r_stval();
+
+      struct vma * vma = 0;
+
+      for(int i = 0; i < NVMA; i++) {
+        if (p->vma[i] && (original_va <= p->vma[i]->start + p->vma[i]->length && original_va >= p->vma[i]->start)) {
+          vma = p->vma[i];
+          break;
+        }
+      }
+
+      if (!vma) {
+        printf("can't find correspond mapping\n");
+        goto bad;
+      }
+
+      mem = kalloc();
+      if(mem == 0) {
+        printf("usertrap: allocate new page failed\n");
+        goto bad;
+      } else {
+        memset(mem, 0, PGSIZE);
+
+        int flag = PTE_U;
+        if (vma->prot & PROT_WRITE) flag |= PTE_W;
+        if (vma->prot & PROT_READ)  flag |= PTE_R;
+
+        if(mappages(pagetable, va, PGSIZE, (uint64)mem, flag) != 0) {
+          kfree(mem);
+          printf("usertrap: map page failed\n");
+          goto bad;
+        }
+
+        // printf("usertrap: %p pid: %d\n", (uint64)mem, p->pid);
+
+        begin_op();
+        struct inode *ip = vma->file->ip;
+        ilock(ip);
+        int off = va - PGROUNDDOWN(vma->start);
+        int n = PGSIZE;
+        if (vma->length - off < n)
+          n = vma->length - off;
+        readi(ip, 1, va, off, n);
+        iunlock(ip);
+        end_op();
+      }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    p->killed = 1;
+    goto bad;
   }
 
+finished:
   if(p->killed)
     exit(-1);
 
@@ -81,7 +136,13 @@ usertrap(void)
     yield();
 
   usertrapret();
+
+  return;
+bad:
+  p->killed = 1;
+  goto finished;
 }
+
 
 //
 // return to user space
