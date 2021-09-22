@@ -1,5 +1,5 @@
 # xv6-lab 2020
-xv6-lab from MIT 6.S081 2020
+xv6-lab from [MIT 6.S081 2020](https://pdos.csail.mit.edu/6.828/2020/)
 
 all finished. some labs' implementation resolve to others' on the Internet. (cow, lock, net, etc)
 
