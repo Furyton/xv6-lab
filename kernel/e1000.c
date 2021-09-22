@@ -95,9 +95,10 @@ e1000_init(uint32 *xregs)
 int
 e1000_transmit(struct mbuf *m)
 {
+  acquire(&e1000_lock);
   int TX_ring_index = regs[E1000_TDT];
   struct tx_desc* desc = &tx_ring[TX_ring_index];
-  if (!desc->status & E1000_TXD_STAT_DD)
+  if ((desc->status & E1000_TXD_STAT_DD) == 0)
     return -1;
   
   // printf("%p %p\n", (uint64)m->head, (uint64)desc.addr);
@@ -109,7 +110,10 @@ e1000_transmit(struct mbuf *m)
   tx_mbufs[TX_ring_index] = m;
   desc->cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
   
-
+  regs[E1000_TDT] = (TX_ring_index + 1) % TX_RING_SIZE;
+  __sync_synchronize();
+  release(&e1000_lock);
+  
   //
   // Your code here.
   //
@@ -124,7 +128,36 @@ e1000_transmit(struct mbuf *m)
 static void
 e1000_recv(void)
 {
-  printf("lalala, recv\n");
+  int id = regs[E1000_RDT];
+
+  id = (id + 1) % RX_RING_SIZE;
+
+  struct rx_desc* desc = &rx_ring[id];
+
+  while(desc->status & E1000_RXD_STAT_DD) {
+
+    acquire(&e1000_lock);
+
+    struct mbuf* buf = rx_mbufs[id];
+
+    buf->len = desc->length;
+
+    rx_mbufs[id] = mbufalloc(0);
+    desc->addr = (uint64) rx_mbufs[id]->head;
+
+    desc->status = 0;
+
+    regs[E1000_RDT] = id;
+
+    __sync_synchronize();
+
+    release(&e1000_lock);
+    net_rx(buf);
+
+    id = (id + 1) % RX_RING_SIZE;
+
+    desc = &rx_ring[id];
+  }
   //
   // Your code here.
   //
