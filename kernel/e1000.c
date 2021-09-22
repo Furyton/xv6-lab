@@ -95,6 +95,21 @@ e1000_init(uint32 *xregs)
 int
 e1000_transmit(struct mbuf *m)
 {
+  int TX_ring_index = regs[E1000_TDT];
+  struct tx_desc* desc = &tx_ring[TX_ring_index];
+  if (!desc->status & E1000_TXD_STAT_DD)
+    return -1;
+  
+  // printf("%p %p\n", (uint64)m->head, (uint64)desc.addr);
+  if (tx_mbufs[TX_ring_index]) {
+    mbuffree(tx_mbufs[TX_ring_index]);
+  }
+  desc->addr = (uint64) m->head;
+  desc->length = m->len;
+  tx_mbufs[TX_ring_index] = m;
+  desc->cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+  
+
   //
   // Your code here.
   //
@@ -109,6 +124,7 @@ e1000_transmit(struct mbuf *m)
 static void
 e1000_recv(void)
 {
+  printf("lalala, recv\n");
   //
   // Your code here.
   //
