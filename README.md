@@ -1,7 +1,9 @@
 # xv6-lab 2020
 xv6-lab from MIT 6.S081 2020
 
-still at the very begining
+all finished. some labs' implementation resolve to others' on the Internet. (cow, lock, net, etc)
+
+I'll put up the lab reports soon.
 
 all the labs are in the coresponding banches. you can check it out.
 
@@ -17,4 +19,4 @@ welcome to report an issue or PR :)
 - [x] [thread](https://github.com/Furyton/xv6-lab/tree/thread)
 - [x] [fs](https://github.com/Furyton/xv6-lab/tree/fs)
 - [x] [mmap](https://github.com/Furyton/xv6-lab/tree/mmap)
-- [ ] [net](https://github.com/Furyton/xv6-lab/tree/net)
+- [x] [net](https://github.com/Furyton/xv6-lab/tree/net)
