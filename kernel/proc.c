@@ -326,8 +326,6 @@ fork(void)
 
   release(&np->lock);
 
-  // printf("fork: finished fork\n");
-
   return pid;
 }
 
@@ -374,10 +372,9 @@ exit(int status)
       if ((start = walkaddr(p->pagetable, p->vma[i]->start))) {
         struct vma *vp = p->vma[i];
         if (vp->flags & MAP_SHARED) {
-          // filewrite(vp->file, vp->start, vp->length);
+          filewrite(vp->file, vp->start, vp->length);
         }
         uvmunmap(p->pagetable, PGROUNDDOWN(vp->start), (vp->end - PGROUNDDOWN(vp->start)) / PGSIZE, 1);
-        // printf("exit: %p\n", start);
       }
       fileclose(p->vma[i]->file);
       vmadealloc(p->vma[i]);

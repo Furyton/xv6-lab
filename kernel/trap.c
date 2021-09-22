@@ -6,9 +6,6 @@
 #include "proc.h"
 #include "defs.h"
 #include "fcntl.h"
-#include "fs.h"
-#include "sleeplock.h"
-#include "file.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -110,16 +107,7 @@ usertrap(void)
 
         // printf("usertrap: %p pid: %d\n", (uint64)mem, p->pid);
 
-        begin_op();
-        struct inode *ip = vma->file->ip;
-        ilock(ip);
-        int off = va - PGROUNDDOWN(vma->start);
-        int n = PGSIZE;
-        if (vma->length - off < n)
-          n = vma->length - off;
-        readi(ip, 1, va, off, n);
-        iunlock(ip);
-        end_op();
+        load_vma(vma, va);
       }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);

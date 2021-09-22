@@ -78,6 +78,21 @@ vmadealloc(struct vma* vma)
   release(&vma_table.lock);
 }
 
+void
+load_vma(struct vma* vma, uint64 va)
+{
+  begin_op();
+  struct inode *ip = vma->file->ip;
+  ilock(ip);
+  int off = va - PGROUNDDOWN(vma->start);
+  int n = PGSIZE;
+  if (vma->length - off < n)
+    n = vma->length - off;
+  readi(ip, 1, va, off, n);
+  iunlock(ip);
+  end_op();
+}
+
 // Increment ref count for file f.
 struct file*
 filedup(struct file *f)
