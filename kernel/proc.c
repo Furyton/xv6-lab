@@ -128,9 +128,7 @@ found:
     return 0;
   }
 
-  for(struct proc* pr = proc; pr < &proc[NPROC]; pr++) {
-    kvmmap_(p->kpagetable, pr->kstack, pr->pkstack, PGSIZE, PTE_R | PTE_W);
-  }
+  kvmmap_(p->kpagetable, p->kstack, p->pkstack, PGSIZE, PTE_R | PTE_W);
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
