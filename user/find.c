@@ -33,20 +33,12 @@ void check_file(char *path) {
 
 char buf[512];
 
-// struct list{
-//     char *name;
-//     struct list *next;
-// };
-
 void explore_dir(char *path) {
-    // printf("I am exploring %s\n", path);
-    
+ 
     char *p;
     int fd;
     struct dirent de;
     struct stat st;
-
-    // struct list *head = 0;
 
     if((fd = open(path, 0)) < 0) {
         fprintf(2, "find: cannot open %s\n", path);
@@ -71,14 +63,10 @@ void explore_dir(char *path) {
         return;
     }
 
-    // printf("%s: step 1\n", path);
-    
     strcpy(buf, path);
     p = buf + strlen(buf);
     *p++ = '/';
 
-    // printf("%s: step 2, %s\n", path, buf);
-    
     while(read(fd, &de, sizeof(de)) == sizeof(de)) {
         if (de.inum == 0)
             continue;
@@ -96,42 +84,10 @@ void explore_dir(char *path) {
             if (strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0)
                 continue;
 
-            // printf("I am going to explore %s\n", buf);
             explore_dir(buf);
-            // char *name = (char*) malloc(strlen(de.name) + 1);
-            // strcpy(name, de.name);
-
-            // struct list *newNode = (struct list*) malloc(sizeof(struct list));
-
-            // newNode->name = name;
-            // if (head) {
-            //     newNode->next = head;
-            //     head = newNode;
-            // } else {
-            //     head = newNode;
-            //     head->next = 0;
-            // }
-            // // newNode->next = head.next;
-            // // head.next = newNode;
         }
     }
     close(fd);
-
-    // struct list *cur = head;
-
-    // while(cur) {
-    //     memmove(p, cur->name, DIRSIZ);
-    //     p[DIRSIZ] = 0;
-    //     explore_dir(buf);
-    //     cur = cur->next;
-    // }
-
-    // cur = head;
-    // while(cur) {
-    //     struct list *tmp = cur->next;
-    //     free(cur);
-    //     cur = tmp;
-    // }
 }
 
 int main(int argc, char *argv[])
