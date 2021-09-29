@@ -83,3 +83,79 @@ void pipeline(int fd[]) {
 每个子进程被分配了一对管道 cfd，用来将当前进程获得的需要继续筛的数字传给子进程。
 
 当前进程首先从管道中读出的数字为素数，记录并打印，并据此筛掉后读入的数字。传递数字前首先会建立新的管道用来通信，之后会fork新进程并递归的去执行 pipeline 函数。
+
+## find
+
+利用系统调用 fstat 等递归地在某一文件将内查找给定的文件。fstat 系统调用可以获得文件描述符对应文件的信息，通过它我们可以知道对应的文件类型是目录还是普通的文件。目录文件中存放的是目录下的子目录和子文件。通过检查文件名是否匹配很容易实现给定文件的查找。
+
+```c
+// in find.c
+
+void explore_dir(char *path) {
+    char *p;
+    int fd;
+    struct dirent de;
+    struct stat st;
+
+    if((fd = open(path, 0)) < 0) {
+        fprintf(2, "find: cannot open %s\n", path);
+
+        return;
+    }
+
+    if(fstat(fd, &st) < 0) {
+        fprintf(2, "find: cannot stat %s\n", path);
+        close(fd);
+        return;
+    }
+
+    if (st.type == T_FILE) {
+        fprintf(2, "find: %s not a dir\n", path);
+        return;
+    }
+
+    if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf) {
+        printf("find: path too long\n");
+
+        return;
+    }
+
+    strcpy(buf, path);
+    p = buf + strlen(buf);
+    *p++ = '/';
+
+    while(read(fd, &de, sizeof(de)) == sizeof(de)) {
+        if (de.inum == 0)
+            continue;
+        memmove(p, de.name, DIRSIZ);
+        p[DIRSIZ] = 0;
+
+        if (stat(buf, &st) < 0) {
+            fprintf(2, "find: cannot stat %s\n", buf);
+            continue;
+        }
+
+        if (st.type == T_FILE) {
+            check_file(buf);
+        } else if (st.type == T_DIR) {
+            if (strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0)
+                continue;
+
+            explore_dir(buf);
+        }
+    }
+    close(fd);
+}
+```
+
+void explore(char* path) 函数用于遍历path目录下的子文件，若是文件则检查是否匹配，若是目录，则递归的调用explore进行搜索。
+
+相关代码见 附录 1.3
+
+## xargs
+
+要求利用系统调用 fork 和 exec 实现简化版的 linux 中的 xargs 命令。xargs 会接受一个执行程序的命令，如 `echo hi`，同时shell可能会通过 pipe 机制向 xargs 传输一系列的参数，我们需要将这些可能的参数追加到执行命令的参数列表中。若遇到换行符，表示执行新的一行命令而不是追加。
+
+实现时需要在 0 号文件描述符中读取可能的追加参数 (若没有数据，则直接执行)，遇到换行符时或没有数据的时候，利用 fork 和 exec 执行给定的程序。执行程序的命令被保存到了 _argv 中。
+
+相关代码见 附件1.4
