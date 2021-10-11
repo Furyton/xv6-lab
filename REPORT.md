@@ -56,10 +56,85 @@ syscall(void)
 
 为了打印系统调用名称，我们需要一个字符串数组记录他们的名字，即 `sysname` 数组。
 
-由于在 user.pl 里，系统调用号被放置在 a7 寄存器中，系统调用的返回值被放置在 a0 寄存器中，所以我们可以在 trapframe 中恢复获得相应的系统调用号和返回值。而mask值，我们可以存放在进程控制块中(struct proc)。当用户调用 trace 时，只需将 proc 中的 mask 设置为给定值即可。
+由于在 [usys.pl](user/usys.pl) 里，系统调用号被放置在 a7 寄存器中，系统调用的返回值被放置在 a0 寄存器中，所以我们可以在 trapframe 中恢复获得相应的系统调用号和返回值。而mask值，我们可以存放在进程控制块中(`struct proc`)。当用户调用 trace 时，只需将 proc 中的 mask 设置为给定值即可。
 
 相关代码详见 附录2.1
 
 ## Sysinfo
 
 要求添加一个系统调用，用来获取当前系统的信息（内存空闲字节数和已使用的进程数）。
+
+```c
+// in kernel/proc.c
+
+int
+process_num(void)
+{
+  struct proc *p;
+
+  int num = 0;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    
+    if (p->state != UNUSED) num ++;
+
+    release(&p->lock);
+  }
+  return num;
+}
+```
+
+已使用进程数的统计只需遍历进程控制块，查看其状态即可。
+
+```c
+// in kernel/kalloc.c
+
+uint64
+freemem_amount(void)
+{
+  struct run *r;
+  uint64 amount = 0;
+
+  acquire(&kmem.lock);
+  r = kmem.freelist;
+  while(r) {
+    r = r->next;
+    amount += PGSIZE;
+  }
+
+  release(&kmem.lock);
+
+  return amount;
+}
+```
+
+内存空闲空间由 `kmem.freelist` 链表管理，所以只需要遍历链表，统计字节数即可。
+
+```c
+// in kernel/sysproc.c
+
+uint64
+sys_sysinfo(void)
+{
+  struct sysinfo info;
+
+  uint64 addr;
+  if (argaddr(0, &addr) < 0) {
+    return -1;
+  }
+
+  info.freemem = freemem_amount();
+  info.nproc = process_num();
+
+  if (copyout(myproc()->pagetable, addr, (char *)&info, sizeof(info)) < 0) {
+    return -1;
+  }
+
+  return 0;
+}
+```
+
+根据这两个函数，可以完成sysinfo的系统调用，填写`sysinfo`结构体，并将其复制到对应的用户地址空间中。
+
+更多相关代码，详见附录2.2
