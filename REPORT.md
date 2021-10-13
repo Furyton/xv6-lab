@@ -4,7 +4,7 @@
 
 ## copy
 
-为了实现 COW，我们首先需要在页表项中设置一个 flag `PTE_C` 用来标识页表是否是 COW 页。
+为了实现 COW，我们首先需要在页表项中设置一个 flag `PTE_C` 用来标识该页是否是 COW 页。
 
 ```c
 // in kernel/riscv.h
