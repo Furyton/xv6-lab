@@ -67,3 +67,17 @@ ld s11, 104(a1)
 ret    /* return to ra */
 
 ```
+
+所以，当我们想要从当前线程切换到下一个线程的时候，可以调用这一函数实现上下文的切换。如
+
+```c
+// part of function thread_schedule() in user/uthread.c
+
+thread_switch((uint64)&t->ctx, (uint64)&next_thread->ctx);
+```
+
+## initialize context
+
+对于上下文的初始化，我们需要赋予它一个初始的返回地址，也就是切换到这一线程后要执行的指令地址，还有栈地址。由于`struct thread`中定义了一段栈空间，我们据此来赋值 `sp`，但要注意栈地址的增长方向是由大到小，所以应将 `thread->stack + STACK_SIZE` 赋给 `sp`。
+
+更多相关代码，详见 8.1
