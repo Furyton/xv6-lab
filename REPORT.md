@@ -1,9 +1,5 @@
 # lazy
 
-trap.c
-vm.c
-sysproc.c
-
 要求修改 `sbrk()` 系统调用，实现 lazy on allocation 机制。当进程调用 `sbrk()` 以分配更多内存空间时，仅仅更新进程控制块中的进程大小的信息，当并不真正地进行分配操作。真正的进程分配操作发生在 `usertrap()` 当中，即发生了页错误的时候。
 
 ## remove the allocation in `sbrk()` system call
