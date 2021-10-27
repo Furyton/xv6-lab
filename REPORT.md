@@ -80,4 +80,25 @@ thread_switch((uint64)&t->ctx, (uint64)&next_thread->ctx);
 
 对于上下文的初始化，我们需要赋予它一个初始的返回地址，也就是切换到这一线程后要执行的指令地址，还有栈地址。由于`struct thread`中定义了一段栈空间，我们据此来赋值 `sp`，但要注意栈地址的增长方向是由大到小，所以应将 `thread->stack + STACK_SIZE` 赋给 `sp`。
 
+```c
+// in user/uthread.c
+
+void 
+thread_create(void (*func)())
+{
+  struct thread *t;
+
+  for (t = all_thread; t < all_thread + MAX_THREAD; t++) {
+    if (t->state == FREE) break;
+  }
+  t->state = RUNNABLE;
+  // YOUR CODE HERE
+  memset(&t->ctx, 0, sizeof(t->ctx));
+  t->ctx.ra = (uint64)func;
+  t->ctx.sp = (uint64)(t->stack + STACK_SIZE);
+}
+```
+
+---
+
 更多相关代码，详见 8.1
