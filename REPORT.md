@@ -4,7 +4,21 @@
 
 学习使用 sleep 系统调用， 命令行第一个参数作为sleep的时间。
 
-相关代码见 附录 1.1
+```c
+// in user/sleep.c
+
+#include "kernel/types.h"
+#include "kernel/stat.h"
+#include "user/user.h"
+
+int main(int argc, char *argv[])
+{
+    if (argc < 2) exit(-1);
+
+    exit(sleep(atoi(argv[1])));
+}
+
+```
 
 ## pingpong
 
@@ -14,7 +28,43 @@ pipe 有两端，一端写入消息后，另一端可以读出。当一端没有
 
 实验流程：父进程在一端写入数据并wait(0)，子进程读取，输出成功信息，写数据，父进程读取，关闭管道。
 
-相关代码见 附件 1.2
+```c
+// user/pingpong.c
+
+#include "kernel/types.h"
+#include "kernel/stat.h"
+#include "user/user.h"
+
+int main(int argc, char *argv[])
+{
+    int p[2], pid;
+    pipe(p);
+
+    pid = fork();
+    char data[] = "d", buf[2];
+
+    if(pid == 0) {
+        if(read(p[0], &buf, 1) > 0) 
+            printf("%d: received ping\n", getpid());
+
+        write(p[1], &data, 1);
+ 
+        exit(0);
+    } else {
+        write(p[1], &data, 1);
+
+        wait(0);
+
+        if(read(p[0], &buf, 1) > 0)
+            printf("%d: received pong\n", getpid());
+        close(p[0]);
+        close(p[1]);
+    }
+
+    exit(0);
+}
+
+```
 
 ## primes
 
@@ -158,4 +208,68 @@ void explore(char* path) 函数用于遍历path目录下的子文件，若是文
 
 实现时需要在 0 号文件描述符中读取可能的追加参数 (若没有数据，则直接执行)，遇到换行符时或没有数据的时候，利用 fork 和 exec 执行给定的程序。执行程序的命令被保存到了 _argv 中。
 
-相关代码见 附件1.4
+```c
+// user/xargs.c
+
+#include "kernel/types.h"
+#include "kernel/stat.h"
+#include "kernel/param.h"
+#include "user/user.h"
+
+char *_argv[MAXARG];
+char buf[512];
+int _argc;
+
+void do_subroutine() {
+    int pid = fork();
+
+    if (pid == 0) {
+        exec(_argv[0], _argv);
+        exit(0);
+    }
+    wait(0);
+}
+
+int main(int argc, char *argv[])
+{
+    if (argc < 2) {
+        fprintf(2, "xargs: too few args\n");
+        exit(-1);
+    }
+    memset(_argv, 0, sizeof(_argv));
+    _argc = argc - 1;
+    for (int i = 1; i < argc; i++) {
+        _argv[i - 1] = argv[i];
+    }
+
+    struct stat st;
+
+    if(fstat(0, &st) < 0) {
+        int pos = 0;
+        
+        _argv[_argc] = buf;
+
+        memset(buf, 0, sizeof(buf));
+
+        while(read(0, &buf[pos], 1) > 0) {
+            if (buf[pos] == '\n') {
+                buf[pos] = 0;
+
+                do_subroutine();
+
+                pos = 0;
+                memset(buf, 0, sizeof(buf));
+            } else {
+                pos++;
+            }
+        }
+        if (buf[0]) {
+            do_subroutine();
+        }
+    } else {
+        do_subroutine();
+    }
+
+    exit(0);
+}
+```
