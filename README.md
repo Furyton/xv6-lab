@@ -2,9 +2,9 @@
 
 xv6-lab from MIT 6.S081 2020
 
-all finished. some labs' implementation resolve to others' on the Internet. (cow, lock, net, etc)
+~~all finished~~. some labs' implementation resolve to others' on the Internet. (cow, lock, net, etc)
 
-I'll put up the lab reports soon.
+~~I'll put up the lab reports soon.~~ Reports have been uploaded (in Chinese).
 
 all the labs are in the coresponding banches. you can check it out.
 
